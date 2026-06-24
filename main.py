@@ -27,7 +27,9 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5500,http://127.0.0.1:5500")
+# Use env var CORS_ORIGINS to control allowed origins in production.
+# When not set, allow all origins so Railway deployments still respond to preflight.
+cors_origins = os.getenv("CORS_ORIGINS", "*")
 if cors_origins.strip() == "*":
     allow_origins = ["*"]
 else:
@@ -36,7 +38,7 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
     allow_credentials=True,
 )
