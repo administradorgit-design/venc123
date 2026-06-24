@@ -2,6 +2,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 import os
+import json
 
 load_dotenv()
 
@@ -11,10 +12,27 @@ ESCOPOS = [
 ]
 
 def conectar_planilha():
-    creds = Credentials.from_service_account_file(
-        os.getenv("GOOGLE_CREDENTIALS_JSON"),
-        scopes=ESCOPOS
-    )
+    cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not cred_json:
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON não está definido")
+
+    if os.path.isfile(cred_json):
+        creds = Credentials.from_service_account_file(
+            cred_json,
+            scopes=ESCOPOS
+        )
+    else:
+        try:
+            service_account_info = json.loads(cred_json)
+        except Exception as exc:
+            raise RuntimeError(
+                "GOOGLE_CREDENTIALS_JSON deve ser um caminho de arquivo válido ou um JSON de credenciais do service account"
+            ) from exc
+        creds = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=ESCOPOS
+        )
+
     cliente = gspread.authorize(creds)
     return cliente.open_by_key(os.getenv("PLANILHA_ID"))
 
