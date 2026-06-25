@@ -31,10 +31,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://unidatas.com",
-        "https://www.unidatas.com",
-        "http://localhost:5500",
-        "http://127.0.0.1:5500"
+        "https://unidatas.com.br",
+        "https://www.unidatas.com.br"
     ],
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
