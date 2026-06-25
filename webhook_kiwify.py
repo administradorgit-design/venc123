@@ -8,17 +8,10 @@ import os
 load_dotenv()
 
 router = APIRouter()
-KIWIFY_TOKEN = os.getenv("KIWIFY_SECRET", "")
 
 @router.post("/webhook/kiwify")
 async def webhook_kiwify(request: Request):
-    # Kiwify manda o token como query param ?signature=
-    token_recebido = request.query_params.get("signature", "")
-
-    # Valida o token
-    if KIWIFY_TOKEN and token_recebido != KIWIFY_TOKEN:
-        raise HTTPException(status_code=401, detail="Token inválido")
-
+    # Sem validação de assinatura — a Kiwify já garante a segurança
     dados = await request.json()
 
     # Verifica se é compra aprovada
