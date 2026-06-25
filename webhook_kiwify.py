@@ -1,5 +1,3 @@
-import hmac
-import hashlib
 from fastapi import APIRouter, Request, HTTPException
 from dotenv import load_dotenv
 from sheets import criar_usuario, buscar_usuario
@@ -10,27 +8,16 @@ import os
 load_dotenv()
 
 router = APIRouter()
-KIWIFY_SECRET = os.getenv("KIWIFY_SECRET", "")
-
-def validar_assinatura_kiwify(payload_bytes: bytes, assinatura: str) -> bool:
-    """Valida que o webhook veio mesmo da Kiwify."""
-    if not KIWIFY_SECRET:
-        return True  # sem secret configurado, aceita tudo (só em dev)
-    esperada = hmac.new(
-        KIWIFY_SECRET.encode("utf-8"),
-        payload_bytes,
-        hashlib.sha1
-    ).hexdigest()
-    return hmac.compare_digest(esperada, assinatura)
+KIWIFY_TOKEN = os.getenv("KIWIFY_SECRET", "")
 
 @router.post("/webhook/kiwify")
 async def webhook_kiwify(request: Request):
-    payload_bytes = await request.body()
+    # Kiwify manda o token como query param ?signature=
+    token_recebido = request.query_params.get("signature", "")
 
-    # Valida assinatura da Kiwify (vem como query param)
-    assinatura = request.query_params.get("signature", "")
-    if KIWIFY_SECRET and not validar_assinatura_kiwify(payload_bytes, assinatura):
-        raise HTTPException(status_code=401, detail="Assinatura inválida")
+    # Valida o token
+    if KIWIFY_TOKEN and token_recebido != KIWIFY_TOKEN:
+        raise HTTPException(status_code=401, detail="Token inválido")
 
     dados = await request.json()
 
@@ -51,8 +38,8 @@ async def webhook_kiwify(request: Request):
         return {"status": "usuario_ja_existe", "email": email_aluno}
 
     # Gera senha temporária e cria o usuário
-    senha_temp  = gerar_senha_temporaria()
-    senha_hash  = hash_senha(senha_temp)
+    senha_temp = gerar_senha_temporaria()
+    senha_hash = hash_senha(senha_temp)
 
     sucesso, msg = criar_usuario(email_aluno, senha_hash, nome_aluno)
     if not sucesso:
