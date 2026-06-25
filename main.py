@@ -15,6 +15,7 @@ from sheets import (
 )
 from email_service import enviar_recuperacao_senha
 from webhook import router as webhook_router
+from webhook_kiwify import router as kiwify_router
 import os
 
 load_dotenv()
@@ -27,24 +28,21 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────
-# Use env var CORS_ORIGINS to control allowed origins in production.
-# When not set, allow all origins so Railway deployments still respond to preflight.
-cors_origins = os.getenv("CORS_ORIGINS", "*")
-if cors_origins.strip() == "*":
-    allow_origins = ["*"]
-else:
-    allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
-    allow_methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
+    allow_origins=[
+        "https://unidatas.com",
+        "https://www.unidatas.com",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500"
+    ],
+    allow_methods=["POST", "GET"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
 # ── Webhook Hotmart ───────────────────────────
 app.include_router(webhook_router)
+app.include_router(kiwify_router)
 
 # ── Schemas ───────────────────────────────────
 class LoginSchema(BaseModel):
