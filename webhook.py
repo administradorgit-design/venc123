@@ -1,6 +1,8 @@
 import hmac
 import hashlib
 from fastapi import APIRouter, Request, HTTPException
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from dotenv import load_dotenv
 from sheets import criar_usuario, buscar_usuario
 from auth import hash_senha, gerar_senha_temporaria
@@ -10,10 +12,13 @@ import os
 load_dotenv()
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 HOTMART_SECRET = os.getenv("HOTMART_SECRET")
 
 def validar_assinatura_hotmart(payload_bytes: bytes, assinatura_recebida: str) -> bool:
     """Valida que o webhook realmente veio da Hotmart."""
+    if not HOTMART_SECRET:
+        return True
     assinatura_esperada = hmac.new(
         HOTMART_SECRET.encode("utf-8"),
         payload_bytes,
@@ -22,6 +27,7 @@ def validar_assinatura_hotmart(payload_bytes: bytes, assinatura_recebida: str) -
     return hmac.compare_digest(assinatura_esperada, assinatura_recebida)
 
 @router.post("/webhook/hotmart")
+@limiter.limit("30/minute")
 async def webhook_hotmart(request: Request):
     payload_bytes = await request.body()
     assinatura = request.headers.get("X-Hotmart-Hottok", "")

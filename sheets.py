@@ -8,7 +8,7 @@ load_dotenv()
 
 ESCOPOS = [
     "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/spreadsheets"
 ]
 
 def conectar_planilha():

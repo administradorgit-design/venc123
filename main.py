@@ -28,17 +28,35 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    CORS_ORIGINS = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+else:
+    CORS_ORIGINS = [
         "https://unidatas.com.br",
         "https://www.unidatas.com.br"
-    ],
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
 
-# ── Webhook Hotmart ───────────────────────────
+# ── Security headers ──────────────────────────
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "0"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
+# ── Webhook routers ───────────────────────────
 app.include_router(webhook_router)
 app.include_router(kiwify_router)
 
@@ -100,7 +118,6 @@ async def login(request: Request, dados: LoginSchema):
 async def recuperar_senha(request: Request, dados: RecuperacaoSchema):
     email = dados.email.lower().strip()
     usuario = buscar_usuario(email)
-    # Resposta igual mesmo se email não existir — evita enumeração de emails
     if usuario:
         nova_senha = gerar_senha_temporaria()
         novo_hash = hash_senha(nova_senha)
@@ -111,8 +128,8 @@ async def recuperar_senha(request: Request, dados: RecuperacaoSchema):
 # ── ROTAS PROTEGIDAS (exigem token) ───────────
 
 @app.get("/me")
-async def meu_perfil(email: str = Depends(usuario_autenticado)):
-    """Dados básicos do aluno logado."""
+@limiter.limit("30/minute")
+async def meu_perfil(request: Request, email: str = Depends(usuario_autenticado)):
     usuario = buscar_usuario(email)
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -140,14 +157,10 @@ async def trocar_senha(
     return {"message": "Senha atualizada com sucesso"}
 
 @app.get("/aulas")
-async def get_aulas(email: str = Depends(usuario_autenticado)):
-    """
-    Retorna a lista de aulas do curso.
-    O link do vídeo NÃO vem aqui — só vem em /aula/{id}.
-    """
+@limiter.limit("30/minute")
+async def get_aulas(request: Request, email: str = Depends(usuario_autenticado)):
     aulas = listar_aulas()
     progresso = buscar_progresso(email)
-    # Adiciona flag de assistido em cada aula
     for aula in aulas:
         aula["assistido"] = aula["id"] in progresso
     return {
@@ -159,10 +172,6 @@ async def get_aulas(email: str = Depends(usuario_autenticado)):
 @app.get("/aula/{aula_id}")
 @limiter.limit("30/minute")
 async def get_aula(request: Request, aula_id: str, email: str = Depends(usuario_autenticado)):
-    """
-    Entrega o link do vídeo para uma aula específica.
-    Só funciona com token válido.
-    """
     link = buscar_link_aula(aula_id)
     if not link:
         raise HTTPException(status_code=404, detail="Aula não encontrada")
@@ -170,19 +179,20 @@ async def get_aula(request: Request, aula_id: str, email: str = Depends(usuario_
     return {"link_video": link, "descricao": descricao}
 
 @app.post("/progresso")
+@limiter.limit("20/minute")
 async def registrar_progresso(
+    request: Request,
     dados: ProgressoSchema,
     email: str = Depends(usuario_autenticado)
 ):
-    """Marca uma aula como assistida."""
     sucesso, msg = salvar_progresso(email, dados.aula_id)
     if not sucesso:
         raise HTTPException(status_code=500, detail="Erro ao salvar progresso")
     return {"message": "Progresso salvo"}
 
 @app.get("/progresso")
-async def get_progresso(email: str = Depends(usuario_autenticado)):
-    """Retorna o progresso completo do aluno."""
+@limiter.limit("30/minute")
+async def get_progresso(request: Request, email: str = Depends(usuario_autenticado)):
     aulas = listar_aulas()
     assistidas = buscar_progresso(email)
     total = len(aulas)
