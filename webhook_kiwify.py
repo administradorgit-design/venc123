@@ -18,7 +18,7 @@ KIWIFY_SECRET = os.getenv("KIWIFY_SECRET")
 def validar_assinatura_kiwify(payload_bytes: bytes, assinatura_recebida: str) -> bool:
     """Valida que o webhook realmente veio da Kiwify."""
     if not KIWIFY_SECRET:
-        return True
+        raise HTTPException(status_code=500, detail="Webhook não configurado: KIWIFY_SECRET ausente")
     assinatura_esperada = hmac.new(
         KIWIFY_SECRET.encode("utf-8"),
         payload_bytes,

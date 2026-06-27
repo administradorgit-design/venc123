@@ -18,7 +18,7 @@ HOTMART_SECRET = os.getenv("HOTMART_SECRET")
 def validar_assinatura_hotmart(payload_bytes: bytes, assinatura_recebida: str) -> bool:
     """Valida que o webhook realmente veio da Hotmart."""
     if not HOTMART_SECRET:
-        return True
+        raise HTTPException(status_code=500, detail="Webhook não configurado: HOTMART_SECRET ausente")
     assinatura_esperada = hmac.new(
         HOTMART_SECRET.encode("utf-8"),
         payload_bytes,

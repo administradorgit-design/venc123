@@ -50,10 +50,22 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "0"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.plyr.io; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.plyr.io; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "frame-src 'self' https://www.youtube.com https://youtube.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://venc123-production.up.railway.app https://unidatas.com.br; "
+        "media-src 'self' https://cdn.plyr.io"
+    )
     return response
 
 # ── Webhook routers ───────────────────────────
@@ -145,8 +157,14 @@ async def trocar_senha(
     dados: TrocarSenhaSchema,
     email: str = Depends(usuario_autenticado)
 ):
-    if len(dados.nova_senha) < 6:
-        raise HTTPException(status_code=400, detail="A nova senha deve ter pelo menos 6 caracteres")
+    if len(dados.nova_senha) < 8:
+        raise HTTPException(status_code=400, detail="A nova senha deve ter pelo menos 8 caracteres")
+    if not any(c.isupper() for c in dados.nova_senha):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra maiúscula")
+    if not any(c.islower() for c in dados.nova_senha):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra minúscula")
+    if not any(c.isdigit() for c in dados.nova_senha):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos um número")
     usuario = buscar_usuario(email)
     if not usuario or not verificar_senha(dados.senha_atual, usuario["senha_hash"]):
         raise HTTPException(status_code=401, detail="Senha atual incorreta")
