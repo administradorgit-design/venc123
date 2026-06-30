@@ -11,7 +11,7 @@ from sheets import (
     buscar_usuario, atualizar_senha,
     listar_aulas, buscar_link_aula,
     buscar_progresso, salvar_progresso,
-    buscar_descricao_aula
+    buscar_descricao_aula, registrar_acesso
 )
 from email_service import enviar_recuperacao_senha
 from webhook import router as webhook_router
@@ -186,6 +186,11 @@ async def login(request: Request, dados: LoginSchema):
 
     limpar_falhas(email)
     token = gerar_token(email)
+
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or request.client.host if request.client else ""
+    ua = request.headers.get("user-agent", "")
+    registrar_acesso(email, "login", ip, ua)
+
     return {
         "token": token,
         "email": email,
@@ -296,6 +301,11 @@ async def get_aula(request: Request, aula_id: str, email: str = Depends(usuario_
     link = buscar_link_aula(aula_id)
     if not link:
         raise HTTPException(status_code=404, detail="Aula não encontrada")
+
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or request.client.host if request.client else ""
+    ua = request.headers.get("user-agent", "")
+    registrar_acesso(email, "aula_aberta", ip, ua, aula_id)
+
     descricao = buscar_descricao_aula(aula_id)
     return {"link_video": link, "descricao": descricao}
 

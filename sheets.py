@@ -190,3 +190,31 @@ def salvar_progresso(email: str, aula_id: str):
     except Exception as e:
         print(f"Erro ao salvar progresso: {e}")
         return False, str(e)
+
+# ── LOG DE ACESSOS (anti-chargeback) ──────────
+
+def aba_acessos():
+    try:
+        planilha = conectar_planilha()
+        try:
+            return planilha.worksheet("acessos")
+        except Exception:
+            aba = planilha.add_worksheet("acessos", rows=1000, cols=6)
+            aba.append_row(["email", "acao", "ip", "user_agent", "data_hora", "aula_id"])
+            return aba
+    except Exception as e:
+        print(f"Erro ao conectar aba de acessos: {e}")
+        return None
+
+
+def registrar_acesso(email: str, acao: str, ip: str = "", user_agent: str = "", aula_id: str = ""):
+    """Registra ação do aluno para prova de consumo em disputas (chargeback)."""
+    try:
+        aba = aba_acessos()
+        if not aba:
+            return
+        from datetime import datetime, timezone
+        data_hora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        aba.append_row([email, acao, ip, user_agent, data_hora, aula_id])
+    except Exception as e:
+        print(f"Erro ao registrar acesso: {e}")
