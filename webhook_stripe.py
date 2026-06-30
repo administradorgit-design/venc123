@@ -54,6 +54,7 @@ async def webhook_stripe(request: Request):
     if not sucesso:
         raise HTTPException(status_code=500, detail=f"Erro ao criar usuário: {msg}")
 
-    enviar_boas_vindas(email_aluno, senha_temp)
+    ok = enviar_boas_vindas(email_aluno, senha_temp)
+    print(f"[WEBHOOK] Email enviado={ok} | email={email_aluno}")
 
     return {"status": "ok", "email": email_aluno}
