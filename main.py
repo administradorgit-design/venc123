@@ -95,6 +95,8 @@ class ProgressoSchema(BaseModel):
 class CheckoutSchema(BaseModel):
     email: EmailStr
     nome: str = ""
+    success_url: str
+    cancel_url: str
 
 class PaymentIntentResponse(BaseModel):
     client_secret: str
