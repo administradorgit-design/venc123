@@ -335,3 +335,16 @@ async def get_progresso(request: Request, email: str = Depends(usuario_autentica
         "percentual": percentual,
         "aulas_assistidas": assistidas
     }
+
+@app.post("/download-consent")
+@limiter.limit("5/minute")
+async def download_consent(request: Request, email: str = Depends(usuario_autenticado)):
+    """Registra consentimento de download — prova anti-chargeback."""
+    usuario = buscar_usuario(email)
+    nome = usuario.get("nome", "") if usuario else ""
+
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or request.client.host if request.client else ""
+    ua = request.headers.get("user-agent", "")
+    registrar_acesso(email, "download_consentido", ip, ua)
+
+    return {"status": "ok", "nome": nome, "email": email}
