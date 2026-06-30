@@ -79,7 +79,8 @@ def buscar_usuario(email: str):
             "email": dados[0],
             "senha_hash": dados[1],
             "nome": dados[2] if len(dados) > 2 else "",
-            "ativo": dados[3] if len(dados) > 3 else "sim"
+            "ativo": dados[3] if len(dados) > 3 else "sim",
+            "criado_em": dados[4] if len(dados) > 4 else ""
         }
     except Exception as e:
         print(f"Erro ao buscar usuário: {e}")
@@ -89,7 +90,9 @@ def criar_usuario(email: str, senha_hash: str, nome: str = ""):
     try:
         if buscar_usuario(email):
             return False, "Usuário já existe"
-        aba_usuarios().append_row([email, senha_hash, nome, "sim"])
+        from datetime import datetime
+        criado_em = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        aba_usuarios().append_row([email, senha_hash, nome, "sim", criado_em])
         return True, "Usuário criado"
     except Exception as e:
         print(f"Erro ao criar usuário: {e}")

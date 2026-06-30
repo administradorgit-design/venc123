@@ -15,7 +15,8 @@ from sheets import (
 )
 from email_service import enviar_recuperacao_senha
 from webhook import router as webhook_router
-from webhook_kiwify import router as kiwify_router
+from webhook_stripe import router as stripe_router
+import stripe
 import os
 
 load_dotenv()
@@ -70,7 +71,11 @@ async def security_headers(request: Request, call_next):
 
 # ── Webhook routers ───────────────────────────
 app.include_router(webhook_router)
-app.include_router(kiwify_router)
+app.include_router(stripe_router)
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
+STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "BRL")
 
 # ── Schemas ───────────────────────────────────
 class LoginSchema(BaseModel):
@@ -86,6 +91,13 @@ class TrocarSenhaSchema(BaseModel):
 
 class ProgressoSchema(BaseModel):
     aula_id: str
+
+class CheckoutSchema(BaseModel):
+    email: EmailStr
+    nome: str = ""
+
+class PaymentIntentResponse(BaseModel):
+    client_secret: str
 
 # ── Auth guard ────────────────────────────────
 seguranca = HTTPBearer()
@@ -137,6 +149,26 @@ async def recuperar_senha(request: Request, dados: RecuperacaoSchema):
         enviar_recuperacao_senha(email, nova_senha)
     return {"message": "Se este e-mail estiver cadastrado, você receberá as instruções em breve."}
 
+@app.post("/checkout")
+@limiter.limit("10/minute")
+async def criar_checkout(request: Request, dados: CheckoutSchema):
+    try:
+        params = {
+            "success_url": dados.success_url,
+            "cancel_url": dados.cancel_url,
+            "mode": "payment",
+            "locale": "pt-BR",
+        }
+        if STRIPE_PRICE_ID:
+            params["line_items"] = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
+        else:
+            raise HTTPException(status_code=500, detail="STRIPE_PRICE_ID não configurado")
+
+        session = stripe.checkout.Session.create(**params)
+        return {"url": session.url}
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar sessão: {e.user_message or str(e)}")
+
 # ── ROTAS PROTEGIDAS (exigem token) ───────────
 
 @app.get("/me")
@@ -145,9 +177,25 @@ async def meu_perfil(request: Request, email: str = Depends(usuario_autenticado)
     usuario = buscar_usuario(email)
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    criado_em = usuario.get("criado_em", "")
+    from datetime import datetime
+    download_liberado = True
+    dias_restantes = 0
+    if criado_em:
+        try:
+            data_criacao = datetime.strptime(criado_em, "%Y-%m-%d %H:%M:%S")
+            delta = datetime.utcnow() - data_criacao
+            if delta.days < 7:
+                download_liberado = False
+                dias_restantes = 7 - delta.days
+        except ValueError:
+            pass
     return {
         "email": usuario["email"],
-        "nome": usuario["nome"]
+        "nome": usuario["nome"],
+        "criado_em": criado_em,
+        "download_liberado": download_liberado,
+        "dias_restantes": dias_restantes
     }
 
 @app.post("/trocar-senha")
