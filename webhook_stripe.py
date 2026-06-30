@@ -17,7 +17,6 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 
 @router.post("/webhook/stripe")
-@limiter.limit("30/minute")
 async def webhook_stripe(request: Request):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")

@@ -11,9 +11,8 @@ load_dotenv()
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET não está definido nas variáveis de ambiente")
-if len(JWT_SECRET) < 16:
-    import warnings
-    warnings.warn("JWT_SECRET é muito curto. Use pelo menos 32 caracteres.", RuntimeWarning)
+if len(JWT_SECRET) < 32:
+    raise RuntimeError("JWT_SECRET é muito curto. Use pelo menos 64 caracteres aleatórios.")
 
 JWT_ALGORITMO = "HS256"
 JWT_EXPIRACAO_HORAS = int(os.getenv("JWT_EXPIRACAO_HORAS", 8))

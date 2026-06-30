@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from dotenv import load_dotenv
 from auth import verificar_senha, gerar_token, verificar_token, hash_senha, gerar_senha_temporaria
 from sheets import (
@@ -16,8 +16,10 @@ from sheets import (
 from email_service import enviar_recuperacao_senha
 from webhook import router as webhook_router
 from webhook_stripe import router as stripe_router
+from urllib.parse import urlparse
 import stripe
 import os
+import time
 
 load_dotenv()
 
@@ -27,6 +29,32 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="UniDatas API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Proteção anti brute-force ──────────────────
+TENTATIVAS_MAX = 5
+BLOQUEIO_SEGUNDOS = 900  # 15 minutos
+falhas_login: dict[str, dict] = {}  # email -> {"tentativas": int, "ate": float}
+
+def verificar_bloqueio(email: str):
+    entrada = falhas_login.get(email)
+    if not entrada:
+        return False
+    if entrada["tentativas"] >= TENTATIVAS_MAX and time.time() < entrada["ate"]:
+        return True
+    if time.time() >= entrada["ate"]:
+        del falhas_login[email]
+    return False
+
+def registrar_falha(email: str):
+    agora = time.time()
+    entrada = falhas_login.get(email, {"tentativas": 0, "ate": 0})
+    entrada["tentativas"] += 1
+    if entrada["tentativas"] >= TENTATIVAS_MAX:
+        entrada["ate"] = agora + BLOQUEIO_SEGUNDOS
+    falhas_login[email] = entrada
+
+def limpar_falhas(email: str):
+    falhas_login.pop(email, None)
 
 # ── CORS ──────────────────────────────────────
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
@@ -77,6 +105,16 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
 STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "BRL")
 
+ALLOWED_DOMAINS = {"unidatas.com.br", "www.unidatas.com.br", "localhost", "127.0.0.1"}
+
+def url_segura(raw: str) -> bool:
+    """Impede open redirect — só aceita URLs dos domínios oficiais."""
+    parsed = urlparse(raw)
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return False
+    return hostname in ALLOWED_DOMAINS or hostname.endswith(".ngrok-free.app")
+
 # ── Schemas ───────────────────────────────────
 class LoginSchema(BaseModel):
     email: EmailStr
@@ -97,6 +135,13 @@ class CheckoutSchema(BaseModel):
     nome: str = ""
     success_url: str
     cancel_url: str
+
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validar_url(cls, v: str) -> str:
+        if not url_segura(v):
+            raise ValueError("URL deve pertencer ao domínio oficial (unidatas.com.br)")
+        return v
 
 class PaymentIntentResponse(BaseModel):
     client_secret: str
@@ -120,18 +165,26 @@ def raiz():
 @limiter.limit("10/minute")
 async def login(request: Request, dados: LoginSchema):
     email = dados.email.lower().strip()
+
+    if verificar_bloqueio(email):
+        segundos = int(falhas_login[email]["ate"] - time.time())
+        raise HTTPException(status_code=429, detail=f"Muitas tentativas. Tente novamente em {segundos}s.")
+
     usuario = buscar_usuario(email)
     erro_generico = HTTPException(status_code=401, detail="E-mail ou senha incorretos")
 
     if not usuario:
+        registrar_falha(email)
         raise erro_generico
 
     if usuario.get("ativo") != "sim":
         raise HTTPException(status_code=403, detail="Conta desativada. Entre em contato com o suporte.")
 
     if not verificar_senha(dados.password, usuario["senha_hash"]):
+        registrar_falha(email)
         raise erro_generico
 
+    limpar_falhas(email)
     token = gerar_token(email)
     return {
         "token": token,
