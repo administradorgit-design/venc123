@@ -4,8 +4,8 @@ import os
 
 load_dotenv()
 
-resend.api_key = os.getenv("RESEND_API_KEY")
-EMAIL_REMETENTE = os.getenv("EMAIL_REMETENTE", "noreply@unidas.com.br")
+resend.api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+EMAIL_REMETENTE = (os.getenv("EMAIL_REMETENTE") or "noreply@unidatas.com.br").strip()
 
 def enviar_boas_vindas(email_aluno: str, senha_temporaria: str):
     """Envia email com credenciais de acesso para o novo aluno."""
